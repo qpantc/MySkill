@@ -45,7 +45,7 @@ class Model:
         pr = Prior(m,C,S,nu)
         self.prior = pr
         
-        
+
 def forwardFilteringM(Model):
     # All the parameters estimated here correspond Eqs. 13-16 and the related ones in the Supplementary Information of Liu et al. (2019)
     # notation in the code -> notation in Liu et al., 2019: 
@@ -57,39 +57,44 @@ def forwardFilteringM(Model):
     rseas = Model.rseas # [1, 2]
     delta = Model.delta #[0.98,0.98,0.98,0.98]
     Prior = Model.prior # m 全为0的列向量 均值; C: 全为1的对角矩阵; precision: 0.04; # degree of freedom
-    period = 365.25/16
+    period = 1 # 365.25/16
     
     
     # 全为0.8 
     deltrend = delta[0];delregn = delta[1];delseas = delta[2];delvar = delta[3]
     
-    # 
-    Ftrend = np.array([[1],[0]]) # 关联隐变量的矩阵
-    ntrend = len(Ftrend) # 2
-    Gtrend = np.array([[1,1],[0,1]]) # 具有时间自相关的隐变量之间的关系矩阵
-    itrend = np.arange(0,ntrend) # 
+    # 关联隐变量的矩阵以及隐变量之间的自相关转换矩阵
+    # local mean and trend
+    Ftrend = np.array([[1],[0]])
+    Gtrend = np.array([[1,1],[0,1]])
     
-    nregn = X.shape[1] # 2个解释的因变量
-    Fregn = np.zeros([nregn,1])
+    # 自相关和环境影响,回归的影响 (Y, Precipitation)2个解释的因变量
+    nregn = X.shape[1]; Fregn = np.zeros([nregn,1])
     Gregn=np.eye(nregn)
-    iregn = np.arange(ntrend,ntrend+nregn)
     
-    pseas = len(rseas) # 季节周期动态
-    nseas = pseas*2
-    iseas = np.arange(ntrend+nregn,ntrend+nregn+nseas)
-    Fseas = np.tile([[1],[0]],[pseas,1])
-    Gseas = np.zeros([nseas,nseas]) # 4x4的0矩阵
-    
+    # 季节周期动态
+    pseas = len(rseas); Fseas = np.tile([[1],[0]],[pseas,1])
     
     # 对于每个季节分量 按周期分别进行傅立叶转化
+    nseas = pseas*2
+    Gseas = np.zeros([nseas,nseas]) # 4x4的0矩阵
     for j in range(pseas):
         c = np.cos(2*np.pi*rseas[j]/period);
         s = np.sin(2*np.pi*rseas[j]/period);
         i = np.arange(2*j,2*(j+1))
         Gseas[np.reshape(i,[2,1]),i] = [[c,s],[-s,c]]
     
+    # 记录合并后矩阵的位置
+    ntrend = len(Ftrend) # 2
+    # local mean and trend
+    itrend = np.arange(0,ntrend) # 
+    # regression
+    iregn = np.arange(ntrend,ntrend+nregn)
+    # season pattern
+    iseas = np.arange(ntrend+nregn,ntrend+nregn+nseas)
     
-    # 合并所有转换矩阵
+    
+    # 合并所有转换矩阵, 设置起始状态以及数据存储空间
     F = np.concatenate((Ftrend,Fregn,Fseas),axis=0)
     G = scipy.linalg.block_diag(Gtrend,Gregn,Gseas) # 合并所有的对角矩阵
     m = Prior.m # m 全为0的列向量 均值; 
@@ -97,17 +102,17 @@ def forwardFilteringM(Model):
     S = Prior.S # precision: 0.04;
     nu = Prior.nu # degree of freedom
 
-
+    # 设置数据存储空间
     T = len(Y) # Y的时间序列
     sm = np.zeros(m.shape) # 隐变量均值 (自相关效应)
     sC = np.zeros([C.shape[0],C.shape[1],1]) # 隐变量方差 (自相关效应)
     sS = np.zeros(1) # precision
     snu = np.zeros(1) # freedom
     slik = np.zeros(1) # likelihood
+    
     for t in range(T):
         
         a = np.dot(G,m) # at = G mt−1: t时刻隐变量的均值 (迭代后)
-        
         R = np.dot(np.dot(G,C),np.transpose(G)) # Rt = G·Ct−1·GT + Wt: # C 为t-1时刻隐变量的方差
         
         R[np.reshape(itrend,[-1,1]),itrend] = R[np.reshape(itrend,[-1,1]),itrend]/deltrend # 关联隐变量的矩阵
@@ -115,7 +120,6 @@ def forwardFilteringM(Model):
         R[np.reshape(iseas,[-1,1]),iseas] = R[np.reshape(iseas,[-1,1]),iseas]/delseas # 周期效应的矩阵
         
         nu = delvar*nu # IG(nu/2,S*nu/2) Assuming the variation of observational error follows an inverse-gamma (IG) distribution
-        
         
         F[iregn,0] = X[t,] # 关联隐变量的矩阵,iregn = np.arange(ntrend,ntrend+nregn), 2,3 两个位置为NDVI和降水 
 
@@ -152,7 +156,7 @@ def forwardFilteringM(Model):
         sS = np.concatenate((sS,[S]),axis=0)
         slik = np.concatenate((slik,[mlik]),axis=0)
         
-    return {'sm':sm, 'sC':sC ,'snu':snu,'sS':sS,'slik':slik} 
+    return {'sm':sm, 'sC':sC ,'snu':snu,'slik':slik} 
 
 def computeAnormaly(CLM,AvgCLM,date0):
     deltaT = timedelta(days=16)
