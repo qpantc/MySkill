@@ -57,7 +57,7 @@ def forwardFilteringM(Model):
     rseas = Model.rseas # [1, 2]
     delta = Model.delta #[0.98,0.98,0.98,0.98]
     Prior = Model.prior # m 全为0的列向量 均值; C: 全为1的对角矩阵; precision: 0.04; # degree of freedom
-    period = 1 # 365.25/16
+    period = 365.25/16 # 1 
     
     
     # 全为0.8 
